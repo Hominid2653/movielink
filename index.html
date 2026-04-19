@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CINESCOPE — Movie Search</title>
+
+  <!-- Tailwind CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            display: ['"Bebas Neue"', 'cursive'],
+            body: ['"DM Sans"', 'sans-serif'],
+          },
+          colors: {
+            bg:      '#0a0a0f',
+            surface: '#12121a',
+            card:    '#1a1a26',
+            border:  '#2a2a3d',
+            accent:  '#e8c547',
+            danger:  '#c4395e',
+            muted:   '#6b6b82',
+            light:   '#f0eee8',
+          },
+          keyframes: {
+            fadeUp: {
+              '0%':   { opacity: '0', transform: 'translateY(14px)' },
+              '100%': { opacity: '1', transform: 'translateY(0)' },
+            },
+            shimmer: {
+              '0%':   { transform: 'translateX(-100%)' },
+              '100%': { transform: 'translateX(100%)' },
+            },
+          },
+          animation: {
+            fadeUp:  'fadeUp 0.4s ease both',
+            shimmer: 'shimmer 1.4s infinite',
+          },
+        },
+      },
+    }
+  </script>
+
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+
+  <style>
+    body { font-family: 'DM Sans', sans-serif; font-weight: 300; }
+
+    /* Grain overlay */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 9999;
+    }
+
+    /* Card image zoom */
+    .card-img { transition: transform 0.5s ease, filter 0.3s; filter: brightness(0.88) saturate(0.8); }
+    .movie-card:hover .card-img { transform: scale(1.07); filter: brightness(1) saturate(1); }
+    .card-overlay { opacity: 0; transition: opacity 0.3s; }
+    .movie-card:hover .card-overlay { opacity: 1; }
+
+    /* Skeleton shimmer */
+    .shimmer-bar::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.04), transparent);
+      animation: shimmer 1.4s infinite;
+    }
+
+    /* Modal backdrop click area */
+    #modalBackdrop { transition: opacity 0.3s; }
+    #modal { transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
+    #modalBackdrop.open { opacity: 1; pointer-events: all; }
+    #modalBackdrop.open #modal { transform: translateY(0); }
+
+    /* Custom scrollbar */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: #0a0a0f; }
+    ::-webkit-scrollbar-thumb { background: #2a2a3d; }
+
+    /* Modal scroll */
+    #modal { max-height: 90vh; overflow-y: auto; }
+  </style>
+</head>
+
+<body class="bg-bg text-light min-h-screen overflow-x-hidden">
+
+  <!-- ── HEADER ── -->
+  <header class="px-8 md:px-16 pt-12 pb-0 flex items-baseline gap-4">
+    <h1 class="font-display text-7xl md:text-9xl tracking-widest leading-none">
+      Cine<span class="text-accent">scope</span>
+    </h1>
+    <p class="text-muted text-xs tracking-widest uppercase pb-2 hidden sm:block">Movie &amp; Series Search</p>
+  </header>
+
+  <!-- ── SEARCH ── -->
+  <section class="px-8 md:px-16 pt-10 pb-6">
+    <div id="searchBar" class="flex max-w-2xl border border-border focus-within:border-accent transition-colors duration-200">
+      <input
+        id="searchInput"
+        type="text"
+        placeholder="Search films, series, episodes…"
+        autocomplete="off"
+        class="flex-1 bg-transparent outline-none px-5 py-4 text-base text-light placeholder-muted font-body tracking-wide"
+      />
+      <button
+        onclick="startSearch()"
+        class="bg-accent hover:bg-yellow-300 transition-colors px-7 font-display text-lg tracking-widest text-bg"
+      >Search</button>
+    </div>
+
+    <!-- Year filter -->
+    <label class="inline-flex items-center gap-2 mt-3 text-muted text-xs tracking-widest uppercase">
+      Year
+      <input
+        id="yearInput"
+        type="text"
+        placeholder="2024"
+        maxlength="4"
+        class="bg-transparent border-b border-border focus:border-accent outline-none text-light text-sm text-center w-16 px-1 py-0.5 transition-colors"
+      />
+    </label>
+  </section>
+
+  <!-- ── STATUS ── -->
+  <p id="status" class="px-8 md:px-16 text-xs tracking-widest uppercase text-muted min-h-5"></p>
+
+  <!-- ── GRID ── -->
+  <main id="grid" class="grid gap-0.5 px-8 md:px-16 pt-6 pb-20"
+        style="grid-template-columns: repeat(auto-fill, minmax(170px, 1fr))">
+  </main>
+
+  <!-- ── LOAD MORE ── -->
+  <div id="loadMoreWrap" class="hidden text-center px-8 pb-20">
+    <button
+      onclick="loadMore()"
+      class="border border-border text-muted hover:border-accent hover:text-accent transition-colors font-display text-base tracking-widest px-10 py-4"
+    >Load More</button>
+  </div>
+
+  <!-- ── MODAL BACKDROP ── -->
+  <div
+    id="modalBackdrop"
+    class="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-6 opacity-0 pointer-events-none"
+    onclick="backdropClose(event)"
+  >
+    <div
+      id="modal"
+      class="bg-surface border border-border w-full max-w-3xl grid md:grid-cols-[240px_1fr] relative translate-y-6"
+    >
+      <!-- Close -->
+      <button
+        onclick="closeModal()"
+        class="absolute top-4 right-4 z-10 w-9 h-9 flex items-center justify-center border border-border text-muted hover:text-light hover:border-light transition-colors bg-bg text-lg"
+      >✕</button>
+
+      <!-- Poster -->
+      <div id="modalPoster" class="relative overflow-hidden min-h-[260px] md:min-h-0"></div>
+
+      <!-- Body -->
+      <div id="modalBody" class="p-8 flex flex-col gap-5 overflow-y-auto"></div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
