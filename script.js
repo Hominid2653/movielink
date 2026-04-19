@@ -1,13 +1,11 @@
 // ─────────────────────────────────────────────────────────────
 //  CINESCOPE — script.js
-//  OMDb API key: http://www.omdbapi.com/apikey.aspx
 // ─────────────────────────────────────────────────────────────
 
-const API_KEY  = '7c03c13';  // ← your key
+const API_KEY  = '7c03c13';
 const BASE_URL = 'https://www.omdbapi.com/';
 const NOW_YEAR = new Date().getFullYear();
 
-// Seed terms for the browse feed — varied enough to surface diverse content
 const BROWSE_TERMS = [
   'the','man','love','war','night','dark','world','lost',
   'black','blood','city','fire','king','star','wild','last',
@@ -16,28 +14,37 @@ const BROWSE_TERMS = [
 ];
 
 // ── App state ──────────────────────────────────────────────
-let mode          = 'browse';   // 'browse' | 'search'
+let mode          = 'browse';
 let currentQuery  = '';
 let currentYear   = null;
 let currentPage   = 1;
 let totalResults  = 0;
 let isFetching    = false;
 let exhausted     = false;
-let sortMode      = 'smart';    // smart | rating | year_desc | year_asc | relevance
+let sortMode      = 'smart';
 
-// Browse-specific pagination
+// Browse-specific
 let browseTermIdx = 0;
 let browsePage    = 1;
-// Buffer of enriched movies waiting to be flushed to the grid
 let browseBuffer  = [];
-const BUFFER_FLUSH = 20; // render once we have this many good results
+const BUFFER_FLUSH = 20;
 
 // Year picker
 let pickerOpen  = false;
 let decadeStart = Math.floor(NOW_YEAR / 10) * 10;
 
-// Enrichment cache — imdbID → full detail object (avoids re-fetching for modal)
+// Detail cache
 const detailCache = new Map();
+
+// ── Filter state ───────────────────────────────────────────
+let filters = {
+  type:      '',   // '' | 'movie' | 'series' | 'episode'
+  genre:     '',   // e.g. 'Action'
+  director:  '',   // partial match
+  actor:     '',   // partial match
+  minRating: '',   // numeric string e.g. '7'
+};
+let filterBarOpen = false;
 
 // ── DOM refs ───────────────────────────────────────────────
 const grid         = document.getElementById('grid');
@@ -57,6 +64,8 @@ const yearChevron  = document.getElementById('yearChevron');
 const modalBd      = document.getElementById('modalBackdrop');
 const modalPoster  = document.getElementById('modalPoster');
 const modalBody    = document.getElementById('modalBody');
+const filterBar    = document.getElementById('filterBar');
+const filterCount  = document.getElementById('filterCount');
 
 // ── Events ─────────────────────────────────────────────────
 searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') triggerSearch(); });
@@ -78,6 +87,121 @@ renderSkeletons(12);
 loadNextPage();
 
 // ──────────────────────────────────────────────────────────
+//  FILTER BAR
+// ──────────────────────────────────────────────────────────
+function toggleFilterBar() {
+  filterBarOpen = !filterBarOpen;
+  filterBar.classList.toggle('open', filterBarOpen);
+}
+
+function setTypeFilter(val) {
+  filters.type = val;
+  // Update chip styles
+  ['typeAll','typeMovie','typeSeries','typeEpisode'].forEach(id => {
+    document.getElementById(id).classList.remove('active','text-bg');
+    document.getElementById(id).classList.add('text-muted');
+  });
+  const activeId = val === '' ? 'typeAll' : val === 'movie' ? 'typeMovie' : val === 'series' ? 'typeSeries' : 'typeEpisode';
+  const activeBtn = document.getElementById(activeId);
+  activeBtn.classList.add('active','text-bg');
+  activeBtn.classList.remove('text-muted');
+  updateFilterCount();
+  reloadWithFilters();
+}
+
+function setGenreFilter(val) {
+  filters.genre = val;
+  updateFilterCount();
+  reloadWithFilters();
+}
+
+function setTextFilter(field, val) {
+  filters[field] = val.trim();
+  updateFilterCount();
+  // Debounce text inputs — reload after 600ms pause
+  clearTimeout(window._filterDebounce);
+  window._filterDebounce = setTimeout(reloadWithFilters, 600);
+}
+
+function setRatingFilter(val) {
+  filters.minRating = val;
+  updateFilterCount();
+  reloadWithFilters();
+}
+
+function clearAllFilters() {
+  filters = { type: '', genre: '', director: '', actor: '', minRating: '' };
+  // Reset UI
+  document.getElementById('genreSelect').value  = '';
+  document.getElementById('ratingSelect').value = '';
+  document.getElementById('directorInput').value = '';
+  document.getElementById('actorInput').value    = '';
+  setTypeFilter(''); // resets chips and reloads
+}
+
+function updateFilterCount() {
+  const active = [filters.type, filters.genre, filters.director, filters.actor, filters.minRating]
+    .filter(Boolean).length;
+  if (active > 0) {
+    filterCount.textContent = active;
+    filterCount.classList.remove('hidden');
+  } else {
+    filterCount.classList.add('hidden');
+  }
+}
+
+// ── Apply client-side filters to an array of enriched movies ─
+function applyFilters(movies) {
+  return movies.filter(m => {
+    // Type
+    if (filters.type && (m.Type || '').toLowerCase() !== filters.type) return false;
+
+    // Genre (partial, case-insensitive)
+    if (filters.genre) {
+      const genres = (m.Genre || '').toLowerCase();
+      if (!genres.includes(filters.genre.toLowerCase())) return false;
+    }
+
+    // Director (partial, case-insensitive)
+    if (filters.director) {
+      const dir = (m.Director || '').toLowerCase();
+      if (!dir.includes(filters.director.toLowerCase())) return false;
+    }
+
+    // Actor (partial, case-insensitive)
+    if (filters.actor) {
+      const cast = (m.Actors || '').toLowerCase();
+      if (!cast.includes(filters.actor.toLowerCase())) return false;
+    }
+
+    // Min rating
+    if (filters.minRating) {
+      const rating = parseFloat(m.imdbRating);
+      if (isNaN(rating) || rating < parseFloat(filters.minRating)) return false;
+    }
+
+    return true;
+  });
+}
+
+function reloadWithFilters() {
+  exhausted = false;
+  grid.innerHTML = '';
+
+  if (mode === 'search' && currentQuery) {
+    currentPage = 1;
+    renderSkeletons(8);
+    loadSearch();
+  } else {
+    browseTermIdx = 0;
+    browsePage    = 1;
+    browseBuffer  = [];
+    renderSkeletons(12);
+    loadBrowse();
+  }
+}
+
+// ──────────────────────────────────────────────────────────
 //  ROUTING
 // ──────────────────────────────────────────────────────────
 function loadNextPage() {
@@ -85,17 +209,18 @@ function loadNextPage() {
 }
 
 // ──────────────────────────────────────────────────────────
-//  BROWSE FEED  (infinite, enriched, sorted by score)
+//  BROWSE FEED
 // ──────────────────────────────────────────────────────────
 async function loadBrowse() {
   if (isFetching || exhausted) return;
   isFetching = true;
   showSpinner(true);
 
-  // Keep fetching seed terms until we fill the buffer
   while (browseBuffer.length < BUFFER_FLUSH && browseTermIdx < BROWSE_TERMS.length * 2) {
     const term = BROWSE_TERMS[browseTermIdx % BROWSE_TERMS.length];
-    let url = `${BASE_URL}?apikey=${API_KEY}&s=${encodeURIComponent(term)}&page=${browsePage}&type=movie`;
+    // Pass type to API if set (saves enrichment work)
+    const typeParam = filters.type ? `&type=${filters.type}` : '';
+    let url = `${BASE_URL}?apikey=${API_KEY}&s=${encodeURIComponent(term)}&page=${browsePage}${typeParam}`;
     if (currentYear) url += `&y=${currentYear}`;
 
     try {
@@ -103,36 +228,39 @@ async function loadBrowse() {
       const data = await res.json();
 
       if (data.Response === 'True') {
-        const total = parseInt(data.totalResults, 10);
-        // Enrich this page's results
+        const total    = parseInt(data.totalResults, 10);
         const enriched = await enrichBatch(data.Search);
-        browseBuffer.push(...enriched);
+        const filtered = applyFilters(enriched);
+        browseBuffer.push(...filtered);
 
         if (browsePage * 10 >= total) { browseTermIdx++; browsePage = 1; }
         else                          { browsePage++; }
       } else {
-        // No results for this term, move on
         browseTermIdx++; browsePage = 1;
       }
     } catch { browseTermIdx++; browsePage = 1; }
 
     if (browseTermIdx >= BROWSE_TERMS.length * 2) { exhausted = true; break; }
   }
-// Sort buffer by score and flush
-browseBuffer.sort((a, b) => scoreMovie(b) - scoreMovie(a));
-const toRender = browseBuffer.splice(0, BUFFER_FLUSH);
-if (toRender.length) {
-  // Clear any skeleton placeholders before rendering real cards
-  const skeletons = grid.querySelectorAll('.shimmer-bar');
-  skeletons.forEach(s => s.remove());
-  renderCards(toRender);
-}
+
+  browseBuffer.sort((a, b) => scoreMovie(b) - scoreMovie(a));
+  const toRender = browseBuffer.splice(0, BUFFER_FLUSH);
+
+  if (toRender.length) {
+    const skeletons = grid.querySelectorAll('.shimmer-bar');
+    skeletons.forEach(s => s.remove());
+    renderCards(toRender);
+  } else if (exhausted) {
+    const skeletons = grid.querySelectorAll('.shimmer-bar');
+    skeletons.forEach(s => s.remove());
+    const activeFilters = [filters.genre, filters.director, filters.actor, filters.minRating].filter(Boolean);
+    if (activeFilters.length) renderEmpty('No results match your filters. Try loosening them.');
+  }
 
   setStatus(exhausted ? "You've seen everything." : '');
   isFetching = false;
   showSpinner(false);
 
-  // If sentinel still visible and not exhausted, keep loading
   if (!exhausted) {
     const rect = sentinel.getBoundingClientRect();
     if (rect.top < window.innerHeight + 400) loadNextPage();
@@ -140,14 +268,16 @@ if (toRender.length) {
 }
 
 // ──────────────────────────────────────────────────────────
-//  SEARCH FEED  (paginated, enriched, smart sorted)
+//  SEARCH FEED
 // ──────────────────────────────────────────────────────────
 async function loadSearch() {
   if (isFetching || exhausted) return;
   isFetching = true;
   showSpinner(true);
 
-  let url = `${BASE_URL}?apikey=${API_KEY}&s=${encodeURIComponent(currentQuery)}&page=${currentPage}`;
+  // Pass type to API if set
+  const typeParam = filters.type ? `&type=${filters.type}` : '';
+  let url = `${BASE_URL}?apikey=${API_KEY}&s=${encodeURIComponent(currentQuery)}&page=${currentPage}${typeParam}`;
   if (currentYear) url += `&y=${currentYear}`;
 
   try {
@@ -157,15 +287,20 @@ async function loadSearch() {
     if (data.Response === 'True') {
       totalResults = parseInt(data.totalResults, 10);
 
-      // Enrich then sort the page
       const enriched = await enrichBatch(data.Search);
-      const sorted   = applySortMode(enriched, currentQuery);
+      const filtered = applyFilters(enriched);
+      const sorted   = applySortMode(filtered, currentQuery);
 
       if (currentPage === 1) grid.innerHTML = '';
-      renderCards(sorted);
+      if (sorted.length) renderCards(sorted);
+      else if (currentPage === 1) renderEmpty('No results match your filters.');
 
       const shown = (currentPage - 1) * 10 + data.Search.length;
-      setStatus(`${totalResults.toLocaleString()} result${totalResults !== 1 ? 's' : ''} · showing ${shown}`);
+      const filteredNote = filtered.length < enriched.length
+        ? ` · ${filtered.length} match filters`
+        : '';
+      setStatus(`${totalResults.toLocaleString()} result${totalResults !== 1 ? 's' : ''} · showing ${shown}${filteredNote}`);
+
       currentPage++;
       if (shown >= totalResults) exhausted = true;
     } else {
@@ -182,14 +317,12 @@ async function loadSearch() {
 }
 
 // ──────────────────────────────────────────────────────────
-//  ENRICHMENT  — fetch full detail for each movie in batch
-//  Uses Promise.allSettled so one failure never breaks the batch
+//  ENRICHMENT
 // ──────────────────────────────────────────────────────────
 async function enrichBatch(movies) {
   const results = await Promise.allSettled(
     movies.map(m => fetchDetail(m.imdbID))
   );
-
   return results
     .map((r, i) => r.status === 'fulfilled' && r.value ? r.value : movies[i])
     .filter(Boolean);
@@ -209,44 +342,28 @@ async function fetchDetail(imdbID) {
 }
 
 // ──────────────────────────────────────────────────────────
-//  SCORING  — composite weighted score for a movie
-//
-//  imdbRating  (0–10)  → weight 0.55
-//  Metascore   (0–100) → normalised to 0–10, weight 0.25
-//  Recency bonus       → newer = slightly higher, weight 0.20
-//    formula: (year - 1900) / (nowYear - 1900), clamped 0–1
+//  SCORING
 // ──────────────────────────────────────────────────────────
 function scoreMovie(m) {
-  const imdb  = parseFloat(m.imdbRating)  || 0;
-  const meta  = parseFloat(m.Metascore)   || 0;
-  const year  = parseInt(m.Year, 10)      || 1900;
+  const imdb    = parseFloat(m.imdbRating) || 0;
+  const meta    = parseFloat(m.Metascore)  || 0;
+  const year    = parseInt(m.Year, 10)     || 1900;
   const recency = Math.min(1, Math.max(0, (year - 1900) / (NOW_YEAR - 1900)));
-
   return (imdb * 0.55) + ((meta / 10) * 0.25) + (recency * 10 * 0.20);
 }
 
 // ──────────────────────────────────────────────────────────
-//  SORT MODES  (search only)
+//  SORT MODES
 // ──────────────────────────────────────────────────────────
 function applySortMode(movies, query) {
   const q = (query || '').toLowerCase().trim();
-
   switch (sortMode) {
-    case 'rating':
-      return [...movies].sort((a, b) => (parseFloat(b.imdbRating)||0) - (parseFloat(a.imdbRating)||0));
-
-    case 'year_desc':
-      return [...movies].sort((a, b) => (parseInt(b.Year)||0) - (parseInt(a.Year)||0));
-
-    case 'year_asc':
-      return [...movies].sort((a, b) => (parseInt(a.Year)||0) - (parseInt(b.Year)||0));
-
-    case 'relevance':
-      return [...movies].sort((a, b) => relevanceScore(b, q) - relevanceScore(a, q));
-
+    case 'rating':    return [...movies].sort((a, b) => (parseFloat(b.imdbRating)||0) - (parseFloat(a.imdbRating)||0));
+    case 'year_desc': return [...movies].sort((a, b) => (parseInt(b.Year)||0) - (parseInt(a.Year)||0));
+    case 'year_asc':  return [...movies].sort((a, b) => (parseInt(a.Year)||0) - (parseInt(b.Year)||0));
+    case 'relevance': return [...movies].sort((a, b) => relevanceScore(b, q) - relevanceScore(a, q));
     case 'smart':
     default:
-      // Blend: relevance (title match) + composite score
       return [...movies].sort((a, b) => {
         const rel = relevanceScore(b, q) - relevanceScore(a, q);
         const scr = scoreMovie(b) - scoreMovie(a);
@@ -258,14 +375,12 @@ function applySortMode(movies, query) {
 function relevanceScore(m, q) {
   if (!q) return 0;
   const title = (m.Title || '').toLowerCase();
-  if (title === q)                  return 100;  // exact match
-  if (title.startsWith(q))         return  80;  // starts with query
-  if (title.includes(q))           return  60;  // contains query
-  // Word-level overlap
+  if (title === q)          return 100;
+  if (title.startsWith(q)) return 80;
+  if (title.includes(q))   return 60;
   const qWords = q.split(/\s+/);
   const tWords = title.split(/\s+/);
-  const overlap = qWords.filter(w => tWords.includes(w)).length;
-  return overlap * 20;
+  return qWords.filter(w => tWords.includes(w)).length * 20;
 }
 
 // ──────────────────────────────────────────────────────────
@@ -316,7 +431,6 @@ function resetToHome() {
 
 function onSortChange() {
   sortMode = sortSelect.value;
-  // Re-run search from page 1 with new sort
   currentPage = 1;
   exhausted   = false;
   grid.innerHTML = '';
@@ -347,8 +461,7 @@ function selectYear(y) {
 function toggleYearPicker() { pickerOpen ? closeYearPicker() : openYearPicker(); }
 function openYearPicker()  { pickerOpen = true;  yearDropdown.classList.remove('hidden'); yearChevron.style.transform = 'rotate(180deg)'; }
 function closeYearPicker() { pickerOpen = false; yearDropdown.classList.add('hidden');    yearChevron.style.transform = 'rotate(0deg)'; }
-
-function shiftDecade(dir) { decadeStart += dir * 10; buildYearGrid(); }
+function shiftDecade(dir)  { decadeStart += dir * 10; buildYearGrid(); }
 
 function buildYearGrid() {
   decadeLabel.textContent = `${decadeStart} – ${decadeStart + 9}`;
@@ -412,7 +525,6 @@ function renderCards(movies) {
 //  SKELETONS / EMPTY
 // ──────────────────────────────────────────────────────────
 function renderSkeletons(n) {
-  // Don't wipe grid if it already has real cards (infinite scroll top-up)
   const existing = grid.querySelectorAll('.movie-card').length;
   if (existing > 0) return;
   grid.innerHTML = '';
@@ -444,7 +556,7 @@ function setStatus(msg, isError = false) {
 function showSpinner(show) { spinner.classList.toggle('hidden', !show); }
 
 // ──────────────────────────────────────────────────────────
-//  MODAL  (uses cache if available, else fetches full detail)
+//  MODAL
 // ──────────────────────────────────────────────────────────
 async function openModal(imdbID) {
   modalBd.classList.add('open');
@@ -454,7 +566,6 @@ async function openModal(imdbID) {
   modalBody.innerHTML   = `<p class="text-muted text-xs tracking-widest uppercase p-8">Fetching details…</p>`;
 
   try {
-    // Upgrade to full plot if we only have short plot cached
     let m = detailCache.get(imdbID);
     if (!m || m.Plot?.length < 120) {
       const res = await fetch(`${BASE_URL}?apikey=${API_KEY}&i=${imdbID}&plot=full`);

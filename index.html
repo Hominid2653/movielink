@@ -79,8 +79,13 @@
     #searchInput:focus { outline: none; }
     #sentinel { height: 2px; }
 
-    /* Hide native select arrow; we add our own chevron via bg-image */
     select { -webkit-appearance: none; -moz-appearance: none; appearance: none; }
+
+    /* Filter bar */
+    #filterBar { transition: max-height 0.3s ease, opacity 0.3s ease; max-height: 0; opacity: 0; overflow: hidden; }
+    #filterBar.open { max-height: 120px; opacity: 1; }
+    .filter-input:focus { outline: none; border-color: #e8c547; }
+    .filter-chip.active { background: #e8c547; color: #09090f; border-color: #e8c547; }
   </style>
 </head>
 
@@ -117,6 +122,16 @@
         </select>
       </div>
 
+      <!-- Filter toggle button -->
+      <button id="filterToggleBtn" onclick="toggleFilterBar()"
+              class="shrink-0 flex items-center gap-2 border border-border hover:border-accent transition-colors px-4 py-2.5 text-xs tracking-widest uppercase text-muted hover:text-accent bg-surface">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <path d="M4 6h16M7 12h10M10 18h4"/>
+        </svg>
+        <span>Filters</span>
+        <span id="filterCount" class="hidden bg-accent text-bg text-xs font-display px-1.5 leading-tight rounded-none">0</span>
+      </button>
+
       <!-- Year picker -->
       <div class="relative shrink-0" id="yearPickerWrap">
         <button id="yearBtn" onclick="toggleYearPicker()"
@@ -143,6 +158,81 @@
         </div>
       </div>
 
+    </div>
+
+    <!-- FILTER BAR -->
+    <div id="filterBar" class="border-t border-border bg-surface/60">
+      <div class="px-5 md:px-12 py-3 flex flex-wrap gap-4 items-end">
+
+        <!-- Type chips -->
+        <div class="flex flex-col gap-1.5">
+          <span class="text-xs tracking-widest uppercase text-muted">Type</span>
+          <div class="flex gap-1.5">
+            <button onclick="setTypeFilter('')"       id="typeAll"     class="filter-chip active text-xs tracking-widest uppercase px-3 py-1.5 border border-border transition-colors hover:border-accent">All</button>
+            <button onclick="setTypeFilter('movie')"  id="typeMovie"   class="filter-chip text-xs tracking-widest uppercase px-3 py-1.5 border border-border text-muted transition-colors hover:border-accent hover:text-accent">Movie</button>
+            <button onclick="setTypeFilter('series')" id="typeSeries"  class="filter-chip text-xs tracking-widest uppercase px-3 py-1.5 border border-border text-muted transition-colors hover:border-accent hover:text-accent">Series</button>
+            <button onclick="setTypeFilter('episode')" id="typeEpisode" class="filter-chip text-xs tracking-widest uppercase px-3 py-1.5 border border-border text-muted transition-colors hover:border-accent hover:text-accent">Episode</button>
+          </div>
+        </div>
+
+        <!-- Genre -->
+        <div class="flex flex-col gap-1.5">
+          <span class="text-xs tracking-widest uppercase text-muted">Genre</span>
+          <div class="relative">
+            <select id="genreSelect" onchange="setGenreFilter(this.value)"
+                    class="filter-input bg-bg border border-border text-muted text-xs tracking-widest uppercase px-3 py-1.5 pr-8 cursor-pointer hover:border-accent hover:text-light transition-colors"
+                    style="background-image:url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%2364647a%22 stroke-width=%222.5%22><path d=%22M6 9l6 6 6-6%22/></svg>');background-repeat:no-repeat;background-position:right 8px center;background-size:12px">
+              <option value="">All Genres</option>
+              <option>Action</option><option>Adventure</option><option>Animation</option>
+              <option>Biography</option><option>Comedy</option><option>Crime</option>
+              <option>Documentary</option><option>Drama</option><option>Family</option>
+              <option>Fantasy</option><option>History</option><option>Horror</option>
+              <option>Music</option><option>Mystery</option><option>Romance</option>
+              <option>Sci-Fi</option><option>Sport</option><option>Thriller</option>
+              <option>War</option><option>Western</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Director -->
+        <div class="flex flex-col gap-1.5">
+          <span class="text-xs tracking-widest uppercase text-muted">Director</span>
+          <input id="directorInput" type="text" placeholder="e.g. Nolan, Kubrick…"
+                 oninput="setTextFilter('director', this.value)"
+                 class="filter-input bg-bg border border-border text-light text-xs tracking-wide px-3 py-1.5 placeholder-muted transition-colors w-40"/>
+        </div>
+
+        <!-- Actor -->
+        <div class="flex flex-col gap-1.5">
+          <span class="text-xs tracking-widest uppercase text-muted">Actor</span>
+          <input id="actorInput" type="text" placeholder="e.g. Pacino, Streep…"
+                 oninput="setTextFilter('actor', this.value)"
+                 class="filter-input bg-bg border border-border text-light text-xs tracking-wide px-3 py-1.5 placeholder-muted transition-colors w-40"/>
+        </div>
+
+        <!-- Min Rating -->
+        <div class="flex flex-col gap-1.5">
+          <span class="text-xs tracking-widest uppercase text-muted">Min Rating</span>
+          <div class="relative">
+            <select id="ratingSelect" onchange="setRatingFilter(this.value)"
+                    class="filter-input bg-bg border border-border text-muted text-xs tracking-widest uppercase px-3 py-1.5 pr-8 cursor-pointer hover:border-accent hover:text-light transition-colors"
+                    style="background-image:url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%2364647a%22 stroke-width=%222.5%22><path d=%22M6 9l6 6 6-6%22/></svg>');background-repeat:no-repeat;background-position:right 8px center;background-size:12px">
+              <option value="">Any</option>
+              <option value="9">★ 9+</option>
+              <option value="8">★ 8+</option>
+              <option value="7">★ 7+</option>
+              <option value="6">★ 6+</option>
+              <option value="5">★ 5+</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Clear all filters -->
+        <button onclick="clearAllFilters()" class="text-xs tracking-widest uppercase text-muted hover:text-danger transition-colors py-1.5 self-end ml-auto">
+          Clear Filters
+        </button>
+
+      </div>
     </div>
   </header>
 
