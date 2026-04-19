@@ -118,11 +118,15 @@ async function loadBrowse() {
 
     if (browseTermIdx >= BROWSE_TERMS.length * 2) { exhausted = true; break; }
   }
-
-  // Sort buffer by score and flush
-  browseBuffer.sort((a, b) => scoreMovie(b) - scoreMovie(a));
-  const toRender = browseBuffer.splice(0, BUFFER_FLUSH);
-  if (toRender.length) renderCards(toRender);
+// Sort buffer by score and flush
+browseBuffer.sort((a, b) => scoreMovie(b) - scoreMovie(a));
+const toRender = browseBuffer.splice(0, BUFFER_FLUSH);
+if (toRender.length) {
+  // Clear any skeleton placeholders before rendering real cards
+  const skeletons = grid.querySelectorAll('.shimmer-bar');
+  skeletons.forEach(s => s.remove());
+  renderCards(toRender);
+}
 
   setStatus(exhausted ? "You've seen everything." : '');
   isFetching = false;
