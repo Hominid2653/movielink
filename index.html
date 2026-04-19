@@ -25,28 +25,14 @@
             light:   '#eeecea',
           },
           keyframes: {
-            fadeUp: {
-              '0%':   { opacity: '0', transform: 'translateY(16px)' },
-              '100%': { opacity: '1', transform: 'translateY(0)' },
-            },
-            shimmer: {
-              '0%':   { transform: 'translateX(-100%)' },
-              '100%': { transform: 'translateX(100%)' },
-            },
-            fadeIn: {
-              '0%':   { opacity: '0', transform: 'translateY(6px) scale(.97)' },
-              '100%': { opacity: '1', transform: 'translateY(0) scale(1)' },
-            },
-            spin: {
-              '0%':   { transform: 'rotate(0deg)' },
-              '100%': { transform: 'rotate(360deg)' },
-            },
+            fadeUp:  { '0%': { opacity:'0', transform:'translateY(16px)' }, '100%': { opacity:'1', transform:'translateY(0)' } },
+            shimmer: { '0%': { transform:'translateX(-100%)' }, '100%': { transform:'translateX(100%)' } },
+            fadeIn:  { '0%': { opacity:'0', transform:'translateY(6px) scale(.97)' }, '100%': { opacity:'1', transform:'translateY(0) scale(1)' } },
           },
           animation: {
             fadeUp:  'fadeUp 0.4s ease both',
             shimmer: 'shimmer 1.5s infinite',
-            fadeIn:  'fadeIn 0.2s ease both',
-            spin:    'spin 0.7s linear infinite',
+            fadeIn:  'fadeIn 0.18s ease both',
           },
         },
       },
@@ -59,90 +45,84 @@
     *, *::before, *::after { box-sizing: border-box; }
     body { font-family: 'DM Sans', sans-serif; font-weight: 300; }
 
-    /* Grain overlay */
     body::before {
-      content: '';
-      position: fixed; inset: 0;
+      content: ''; position: fixed; inset: 0;
       background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
       pointer-events: none; z-index: 9999;
     }
 
-    /* Card hover */
     .card-img { transition: transform 0.55s ease, filter 0.3s; filter: brightness(.85) saturate(.75); }
     .movie-card:hover .card-img { transform: scale(1.07); filter: brightness(1) saturate(1); }
     .card-overlay { opacity: 0; transition: opacity 0.3s; }
     .movie-card:hover .card-overlay { opacity: 1; }
 
-    /* Shimmer skeleton */
     .shimmer-bar::after {
-      content: '';
-      position: absolute; inset: 0;
+      content: ''; position: absolute; inset: 0;
       background: linear-gradient(90deg, transparent, rgba(255,255,255,0.045), transparent);
       animation: shimmer 1.5s infinite;
     }
 
-    /* Modal */
     #modalBackdrop { transition: opacity 0.25s; }
     #modal { transition: transform 0.35s cubic-bezier(0.16,1,0.3,1); max-height: 90vh; overflow-y: auto; }
-    #modalBackdrop.open         { opacity: 1; pointer-events: all; }
-    #modalBackdrop.open #modal  { transform: translateY(0); }
+    #modalBackdrop.open { opacity: 1; pointer-events: all; }
+    #modalBackdrop.open #modal { transform: translateY(0); }
 
-    /* Year dropdown */
     #yearDropdown { animation: fadeIn 0.18s ease both; }
 
-    /* Scrollbar */
-    ::-webkit-scrollbar       { width: 3px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner-ring { animation: spin 0.75s linear infinite; }
+
+    ::-webkit-scrollbar { width: 3px; }
     ::-webkit-scrollbar-track { background: #09090f; }
     ::-webkit-scrollbar-thumb { background: #272736; border-radius: 2px; }
 
     #searchInput:focus { outline: none; }
     #sentinel { height: 2px; }
+
+    /* Hide native select arrow; we add our own chevron via bg-image */
+    select { -webkit-appearance: none; -moz-appearance: none; appearance: none; }
   </style>
 </head>
 
 <body class="bg-bg text-light min-h-screen overflow-x-hidden">
 
-  <!-- ── STICKY HEADER ── -->
+  <!-- STICKY HEADER -->
   <header class="sticky top-0 z-40 bg-bg/90 backdrop-blur-md border-b border-border">
     <div class="px-5 md:px-12 py-3 flex items-center gap-3 flex-wrap">
 
-      <!-- Logo -->
       <button onclick="resetToHome()" class="font-display text-3xl md:text-4xl tracking-widest leading-none shrink-0">
         Cine<span class="text-accent">scope</span>
       </button>
 
-      <!-- Search input -->
+      <!-- Search bar -->
       <div class="flex flex-1 min-w-[180px] max-w-lg border border-border focus-within:border-accent transition-colors duration-200 bg-surface">
-        <input
-          id="searchInput"
-          type="text"
-          placeholder="Search films, series, episodes…"
-          autocomplete="off"
-          class="flex-1 bg-transparent px-4 py-2.5 text-sm text-light placeholder-muted tracking-wide"
-        />
-        <button
-          id="clearBtn"
-          onclick="clearSearch()"
-          class="hidden px-3 text-muted hover:text-light transition-colors text-base leading-none"
-          title="Clear search"
-        >✕</button>
-        <button
-          onclick="triggerSearch()"
-          class="bg-accent hover:bg-yellow-300 transition-colors px-5 font-display text-base tracking-widest text-bg shrink-0"
-        >Go</button>
+        <input id="searchInput" type="text" placeholder="Search films, series, episodes…" autocomplete="off"
+               class="flex-1 bg-transparent px-4 py-2.5 text-sm text-light placeholder-muted tracking-wide"/>
+        <button id="clearBtn" onclick="clearSearch()"
+                class="hidden px-3 text-muted hover:text-light transition-colors text-base leading-none" title="Clear">✕</button>
+        <button onclick="triggerSearch()"
+                class="bg-accent hover:bg-yellow-300 transition-colors px-5 font-display text-base tracking-widest text-bg shrink-0">Go</button>
       </div>
 
-      <!-- Year picker trigger -->
+      <!-- Sort (search mode only) -->
+      <div id="sortWrap" class="hidden shrink-0 relative">
+        <select id="sortSelect" onchange="onSortChange()"
+                class="bg-surface border border-border text-muted text-xs tracking-widest uppercase px-3 py-2.5 pr-8 cursor-pointer hover:border-accent hover:text-light transition-colors"
+                style="background-image:url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%2364647a%22 stroke-width=%222.5%22><path d=%22M6 9l6 6 6-6%22/></svg>');background-repeat:no-repeat;background-position:right 8px center;background-size:12px">
+          <option value="smart">★ Smart Sort</option>
+          <option value="rating">Top Rated</option>
+          <option value="year_desc">Newest First</option>
+          <option value="year_asc">Oldest First</option>
+          <option value="relevance">Most Relevant</option>
+        </select>
+      </div>
+
+      <!-- Year picker -->
       <div class="relative shrink-0" id="yearPickerWrap">
-        <button
-          id="yearBtn"
-          onclick="toggleYearPicker()"
-          class="flex items-center gap-2 border border-border hover:border-accent transition-colors px-4 py-2.5 text-xs tracking-widest uppercase text-muted hover:text-accent bg-surface"
-        >
-          <!-- Calendar icon -->
+        <button id="yearBtn" onclick="toggleYearPicker()"
+                class="flex items-center gap-2 border border-border hover:border-accent transition-colors px-4 py-2.5 text-xs tracking-widest uppercase text-muted hover:text-accent bg-surface">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-            <rect x="3" y="4" width="18" height="18" rx="2"/>
-            <path d="M16 2v4M8 2v4M3 10h18"/>
+            <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
           </svg>
           <span id="yearLabel">All Years</span>
           <svg id="yearChevron" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="transition:transform .2s">
@@ -150,22 +130,15 @@
           </svg>
         </button>
 
-        <!-- Year grid dropdown -->
-        <div id="yearDropdown" class="hidden absolute right-0 top-full mt-2 w-68 bg-surface border border-border shadow-2xl z-50" style="width:272px">
-          <!-- Decade nav -->
+        <div id="yearDropdown" class="hidden absolute right-0 top-full mt-2 bg-surface border border-border shadow-2xl z-50" style="width:272px">
           <div class="flex items-center justify-between px-4 py-3 border-b border-border">
             <button onclick="shiftDecade(-1)" class="text-muted hover:text-accent text-xl leading-none transition-colors px-1">‹</button>
             <span id="decadeLabel" class="font-display tracking-widest text-sm text-light"></span>
             <button onclick="shiftDecade(+1)"  class="text-muted hover:text-accent text-xl leading-none transition-colors px-1">›</button>
           </div>
-          <!-- Year cells -->
           <div id="yearGrid" class="grid grid-cols-4 gap-1 p-3"></div>
-          <!-- Clear -->
           <div class="border-t border-border px-3 py-2">
-            <button
-              onclick="selectYear(null)"
-              class="w-full text-xs tracking-widest uppercase text-muted hover:text-accent transition-colors py-1"
-            >Clear — All Years</button>
+            <button onclick="selectYear(null)" class="w-full text-xs tracking-widest uppercase text-muted hover:text-accent transition-colors py-1">Clear — All Years</button>
           </div>
         </div>
       </div>
@@ -173,49 +146,37 @@
     </div>
   </header>
 
-  <!-- ── HERO (home state only) ── -->
+  <!-- HERO -->
   <div id="hero" class="px-5 md:px-12 pt-14 pb-8">
-    <p class="text-muted text-xs tracking-widest uppercase mb-3">Now Browsing</p>
+    <p class="text-muted text-xs tracking-widest uppercase mb-3">Top Rated · Curated · Now Loading</p>
     <h2 class="font-display text-5xl md:text-8xl tracking-widest leading-none">
       What's on <span class="text-accent">tonight?</span>
     </h2>
     <p class="text-muted text-sm tracking-wide mt-3 max-w-xs leading-relaxed">
-      Scroll to browse popular titles — or search &amp; filter above.
+      Sorted by IMDb rating &amp; recency. Search or filter above.
     </p>
   </div>
 
-  <!-- ── STATUS LINE ── -->
+  <!-- STATUS -->
   <p id="status" class="px-5 md:px-12 pb-3 text-xs tracking-widest uppercase text-muted min-h-5"></p>
 
-  <!-- ── MOVIE GRID ── -->
-  <main
-    id="grid"
-    class="grid gap-0.5 px-5 md:px-12 pb-6"
-    style="grid-template-columns: repeat(auto-fill, minmax(160px, 1fr))"
-  ></main>
+  <!-- GRID -->
+  <main id="grid" class="grid gap-0.5 px-5 md:px-12 pb-6"
+        style="grid-template-columns: repeat(auto-fill, minmax(160px, 1fr))"></main>
 
-  <!-- Infinite scroll sentinel -->
   <div id="sentinel"></div>
 
-  <!-- Loading spinner -->
   <div id="spinner" class="hidden py-10 flex justify-center">
-    <div class="w-5 h-5 border-2 border-border border-t-accent rounded-full" style="animation: spin 0.7s linear infinite"></div>
+    <div class="spinner-ring w-5 h-5 border-2 border-border border-t-accent rounded-full"></div>
   </div>
 
-  <!-- ── DETAIL MODAL ── -->
-  <div
-    id="modalBackdrop"
-    class="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 opacity-0 pointer-events-none"
-    onclick="backdropClose(event)"
-  >
-    <div
-      id="modal"
-      class="bg-surface border border-border w-full max-w-3xl grid md:grid-cols-[240px_1fr] relative translate-y-6"
-    >
-      <button
-        onclick="closeModal()"
-        class="absolute top-3 right-3 z-10 w-8 h-8 flex items-center justify-center border border-border text-muted hover:text-light hover:border-light transition-colors bg-bg text-sm"
-      >✕</button>
+  <!-- MODAL -->
+  <div id="modalBackdrop"
+       class="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 opacity-0 pointer-events-none"
+       onclick="backdropClose(event)">
+    <div id="modal" class="bg-surface border border-border w-full max-w-3xl grid md:grid-cols-[240px_1fr] relative translate-y-6">
+      <button onclick="closeModal()"
+              class="absolute top-3 right-3 z-10 w-8 h-8 flex items-center justify-center border border-border text-muted hover:text-light hover:border-light transition-colors bg-bg text-sm">✕</button>
       <div id="modalPoster" class="relative overflow-hidden min-h-[240px] md:min-h-0"></div>
       <div id="modalBody"   class="p-7 flex flex-col gap-4 overflow-y-auto" style="max-height:90vh"></div>
     </div>
